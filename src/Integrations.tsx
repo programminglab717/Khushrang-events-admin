@@ -12,7 +12,6 @@ export default function Integrations({connected,clients,api,notify}:Props){
  const act=async(action:string,id:string)=>{try{await api(action,{id});await refresh();notify('Delivery updated')}catch(e){notify(String(e))}};
  const names=new Map(clients.map(c=>[c.id,c.name]));
  return <div className="integrations-page">
- {!connected&&<div className="integration-notice"><ShieldCheck size={21}/><div><strong>Connect your live workspace to use integrations</strong><p>Demo mode never receives or sends real client data. Sign in from Settings to view connections and delivery history.</p></div></div>}
  {error&&<div className="integration-notice error" role="alert"><strong>{error}</strong><p>Check your server configuration and confirm the database was prepared with database-setup.sql.</p></div>}
  <div className="integration-cards">
  <article className="card integration-card"><span className="integration-symbol"><ArrowDownLeft size={22}/></span><h3>Receive client data</h3><p>Bring website inquiries and external contacts into your client directory.</p><code>POST integrations.php?action=clients</code><div className="connection-state">{snapshot.connectors.filter(c=>c.configured&&c.scopes.includes('clients')).map(c=><span key={c.source} className="badge">{c.source}</span>)}{!snapshot.connectors.some(c=>c.configured&&c.scopes.includes('clients'))&&<span>Not configured</span>}</div></article>

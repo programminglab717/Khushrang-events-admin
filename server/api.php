@@ -7,7 +7,7 @@ header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store');
 header('Content-Type: application/json; charset=utf-8');
 $action = $_GET['action'] ?? '';
-function fail(string $message, int $code = 400): never { http_response_code($code); echo json_encode(['error'=>$message]); exit; }
+function fail(string $message, int $code = 400,?string $errorCode=null): never { http_response_code($code); echo json_encode(array_filter(['error'=>$message,'code'=>$errorCode],static fn($v)=>$v!==null)); exit; }
 if (($_SERVER['HTTPS'] ?? '') !== 'on' && !in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1','::1'], true)) fail('HTTPS is required.', 403);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
@@ -15,9 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($origin !== ((($_SERVER['HTTPS'] ?? '') === 'on' ? 'https' : 'http') . '://' . $host)) fail('Same-origin requests required.',403);
 }
 session_set_cookie_params(['httponly'=>true,'secure'=>(($_SERVER['HTTPS'] ?? '') === 'on'),'samesite'=>'Strict','path'=>'/']);
-session_start();
-$configPath = getenv('KHUSHRANG_CONFIG') ?: dirname(__DIR__, 2) . '/khushrang-private/config.php';
+if(!session_start())fail('PHP session storage is unavailable. Check PHP session settings in Hostinger.',503,'SESSION_UNAVAILABLE');
 require __DIR__.'/config-loader.php';
+$configPath=khushrang_config_path(__DIR__);
 try {
 $config = khushrang_load_config($configPath);
 $db = new PDO($config['dsn'], $config['user'], $config['password'], [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_EMULATE_PREPARES=>false,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
@@ -92,4 +92,4 @@ if($action==='save') {
     $q=$db->prepare('INSERT INTO records(id,kind,payload) VALUES(?,?,?) ON DUPLICATE KEY UPDATE payload=IF(kind=VALUES(kind),VALUES(payload),payload),updated_at=NOW()');$q->execute([$id,$kind,json_encode($clean)]);echo json_encode(['id'=>$id]);exit;
 }
 fail('Unknown action.',404);
-} catch(Throwable $e) { error_log('Khushrang API: '.$e->getMessage());fail('Server operation failed. Check the private PHP error log.',500); }
+} catch(Throwable $e) { [$code,$message,$status]=khushrang_failure($e);error_log('Khushrang API ['.$code.']: '.$message);fail($message,$status,$code); }

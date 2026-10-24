@@ -8,7 +8,7 @@ require __DIR__.'/config-loader.php';
 try {
     if(($_SERVER['HTTPS']??'')!=='on'&&!in_array($_SERVER['REMOTE_ADDR']??'',['127.0.0.1','::1'],true))throw new IntegrationError('HTTPS required.',403);
     if($_SERVER['REQUEST_METHOD']!=='POST')throw new IntegrationError('POST required.',405);
-    $path=getenv('KHUSHRANG_CONFIG')?:dirname(__DIR__,2).'/khushrang-private/config.php';$config=khushrang_load_config($path);
+    $path=khushrang_config_path(__DIR__);$config=khushrang_load_config($path);
     $auth=$_SERVER['HTTP_AUTHORIZATION']??$_SERVER['REDIRECT_HTTP_AUTHORIZATION']??'';
     if(!preg_match('/^Bearer ([A-Za-z0-9_-]{32,256})$/',$auth,$m))throw new IntegrationError('Invalid integration credentials.',401);
     $hash=hash('sha256',$m[1]);$connector=null;
@@ -23,4 +23,4 @@ try {
     $db=new PDO($config['dsn'],$config['user'],$config['password'],[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_EMULATE_PREPARES=>false,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);$db->exec("SET time_zone='+00:00'");
     $bucket=(int)floor(time()/60);$q=$db->prepare('INSERT INTO integration_rate_limits(source,minute_bucket) VALUES(?,?) ON DUPLICATE KEY UPDATE requests=requests+1');$q->execute([$source,$bucket]);$q=$db->prepare('SELECT requests FROM integration_rate_limits WHERE source=? AND minute_bucket=?');$q->execute([$source,$bucket]);if((int)$q->fetchColumn()>120){header('Retry-After: 60');throw new IntegrationError('Connector request limit exceeded.',429);}
     $result=integration_receive($db,$source,$action,$input,$raw);http_response_code($result['duplicate']?200:202);echo json_encode($result);
-}catch(IntegrationError $e){http_response_code($e->httpStatus);echo json_encode(['error'=>$e->getMessage()]);}catch(Throwable $e){error_log('Khushrang inbound integration failed: '.get_class($e));http_response_code(500);echo json_encode(['error'=>'Integration processing failed. Check configuration and database setup.']);}
+}catch(IntegrationError $e){http_response_code($e->httpStatus);echo json_encode(['error'=>$e->getMessage()]);}catch(Throwable $e){[$code,$message,$status]=khushrang_failure($e);error_log('Khushrang inbound ['.$code.']: '.$message);http_response_code($status);echo json_encode(['error'=>$message,'code'=>$code]);}

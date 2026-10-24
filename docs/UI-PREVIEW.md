@@ -1,6 +1,6 @@
 # Khushrang admin panel — UI preview
 
-These screenshots are from the production build and show sample data. Click an image to open it at full size.
+The login screenshots show the standalone white sign-in page. Portal screenshots show an authenticated, isolated sample database; no portal or demonstration is available before login. Click an image to open it at full size.
 
 ## Desktop dashboard
 
@@ -9,6 +9,10 @@ These screenshots are from the production build and show sample data. Click an i
 ## Login
 
 ![Login screen](ui-review/login-desktop.png)
+
+## Mobile login
+
+![Mobile login](ui-review/login-mobile.png)
 
 ## User management and permissions
 

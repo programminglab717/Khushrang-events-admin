@@ -17,5 +17,13 @@ try{
  try{khushrang_load_config($dir.'/config.php');throw new LogicException('Unsafe DB name accepted');}catch(RuntimeException $e){verify(!str_contains($e->getMessage(),'unprinted-test-value'),'Error reveals credentials');}
  file_put_contents($dir.'/.env',"DUP=one\nDUP=two\n");try{khushrang_read_env($dir.'/.env');throw new LogicException('Duplicate keys accepted');}catch(RuntimeException $e){}
  file_put_contents($dir.'/.env',"DB_PASSWORD=\"unterminated\n");try{khushrang_read_env($dir.'/.env');throw new LogicException('Malformed quotes accepted');}catch(RuntimeException $e){}
+
+ $host=$dir.'/hosting';mkdir($host);mkdir($host.'/public_html');mkdir($host.'/public_html/admin.khushrangevents.com');mkdir($host.'/khushrang-private');file_put_contents($host.'/khushrang-private/.env','STORAGE_PATH=/private/media');
+ $oldRoot=$_SERVER['DOCUMENT_ROOT']??null;$_SERVER['DOCUMENT_ROOT']=$host.'/public_html/admin.khushrangevents.com';
+ verify(khushrang_config_path($host.'/public_html/admin.khushrangevents.com')===$host.'/khushrang-private/config.php','Subdomain folder lookup failed');
+ $_SERVER['DOCUMENT_ROOT']=$host.'/public_html';verify(khushrang_config_path($host.'/public_html')===$host.'/khushrang-private/config.php','Document-root lookup failed');
+ mkdir($host.'/public_html/khushrang-private');file_put_contents($host.'/public_html/khushrang-private/.env','UNSAFE=1');
+ $_SERVER['DOCUMENT_ROOT']=$host.'/public_html/admin.khushrangevents.com';verify(khushrang_config_path($host.'/public_html/admin.khushrangevents.com')===$host.'/khushrang-private/config.php','Public private-directory incorrectly selected');
+ unlink($host.'/public_html/khushrang-private/.env');rmdir($host.'/public_html/khushrang-private');unlink($host.'/khushrang-private/.env');rmdir($host.'/khushrang-private');rmdir($host.'/public_html/admin.khushrangevents.com');rmdir($host.'/public_html');rmdir($host);if($oldRoot===null)unset($_SERVER['DOCUMENT_ROOT']);else $_SERVER['DOCUMENT_ROOT']=$oldRoot;
  echo "PASS: dotenv-only config, quoted special characters, runtime precedence, legacy compatibility, integration preservation, storage override, invalid DB name, duplicate keys, malformed quoting; no credential output.\n";
 }finally{foreach($keys as $key)putenv($saved[$key]===false?$key:$key.'='.$saved[$key]);foreach(glob($dir.'/*') as $file)unlink($file);if(is_file($dir.'/.env'))unlink($dir.'/.env');rmdir($dir);}

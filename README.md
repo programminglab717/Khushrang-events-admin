@@ -19,7 +19,7 @@ npm run build
 npm run preview
 ```
 
-Open the development server locally. The panel defaults to a clearly labeled demo workspace; sample edits persist in this browser's localStorage. Demo records are never imported into the live database. The frontend can be built and explored without PHP or credentials.
+The panel is private in both development and production. It always starts with a standalone white login screen; no dashboard is mounted until authentication succeeds. There is no demo mode or browser-local business data. Building needs Node only; using the application requires the PHP backend, a prepared MySQL database, and an account. For Vite development, run the configured PHP server on port 8080; Vite proxies `/api.php` to it.
 
 Included: overview with calculated payments/expenses chart, event/order pipeline, client directory, vendor directory, invoices, payment and expense records, task checklists, search/status filtering, CSV exports, CRUD forms, and backend-enabled media uploads. PKR is the current currency. Each invoice is a single amount record; multi-line accounting, tax calculations, email delivery, audit logs, event-linked galleries, and customer payment processing require further work. Payment allocations are currently by client rather than invoice; overview collections are an estimate, not an accounting ledger. Live accounts have server-enforced Super Admin, Admin, Operations, Finance, and Viewer roles. See USERS-AND-DATABASE.md.
 
@@ -58,7 +58,7 @@ Example for a panel deployed at `https://YOUR_DOMAIN/admin/`:
       api.php                # copied from server/api.php
 ```
 
-The API resolves configuration at `dirname(__DIR__, 2)/khushrang-private/config.php`, matching this layout. For a different layout set the server environment variable `KHUSHRANG_CONFIG` to an absolute private path or adjust the deployment copy of the lookup. Do not place configuration in a publicly reachable folder. Media is intentionally filesystem storage **outside Git**, not a repository of private client photographs. Updates replace only `public_html/admin/`. Back up the private media directory separately.
+The API discovers a named `khushrang-private` folder outside public_html for both document-root/subdomain installations and subfolder installations. For a different layout set the server environment variable `KHUSHRANG_CONFIG` to an absolute private path or adjust the deployment copy of the lookup. Do not place configuration in a publicly reachable folder. Media is intentionally filesystem storage **outside Git**, not a repository of private client photographs. Updates replace only `public_html/admin/`. Back up the private media directory separately.
 
 1. Enable PHP 8.1+ with `pdo_mysql`, `fileinfo`, and `mbstring`. Enable HTTPS. Set `upload_max_filesize=25M`, `post_max_size=28M` or higher; the API enforces a 25 MB file limit. Ensure PHP session storage is writable.
 2. Create a dedicated NEW EMPTY MySQL database/user in Hostinger. In phpMyAdmin select that database and import `database-setup.sql`. This single file creates every table and the initial Super Admin. No migration files, migration runner, or SSH command are needed. Business tables start empty.
@@ -78,7 +78,7 @@ Import `database-setup.sql` into a new disposable MySQL database and configure t
 KHUSHRANG_CONFIG=/absolute/path/config.php php -S 127.0.0.1:8080 -t dist
 ```
 
-Visit `http://127.0.0.1:8080` (local loopback is allowed without TLS). Do not run Vite and the PHP API on different origins without an explicitly configured development proxy. The API does not support cross-origin cookies. Never use production credentials or private customer data for local demos.
+Visit `http://127.0.0.1:8080` (local loopback is allowed without TLS). Vite is configured to proxy `/api.php` to the local PHP server on port 8080, preserving the browser origin. The API does not support cross-origin cookies. Never use production credentials or private customer data for local testing.
 
 ## Validation status
 
@@ -86,7 +86,7 @@ See the delivery notes for checks executed in the build environment. A frontend 
 
 ## Browser smoke test
 
-With the frontend dev server running, run `npx playwright install chromium` once and `npm run test:smoke`. To use system Chromium: `CHROMIUM_PATH=/usr/bin/chromium npm run test:smoke`. `TEST_BASE_URL` overrides the default dev server URL. The test uses a fresh browser context and only changes local demo data. It covers CRUD, persistence, search, CSV, navigation, task completion, and mobile overflow/navigation.
+With the PHP backend running against a **disposable database**, use a private Super Admin test-account JSON file with `email` and `password`. Run `npx playwright install chromium` once, then `API_TEST_CREDENTIALS_FILE=/private/test-account.json npm run test:smoke`. To use system Chromium add `CHROMIUM_PATH=/usr/bin/chromium`. `TEST_BASE_URL` overrides the default `http://127.0.0.1:8080` (use port 5173 to test the Vite proxy). Tests create/edit/delete a uniquely named event in the disposable database; never point them at production. They also check the anonymous login has no portal markup/demo entry, error isolation, session restoration, navigation, mobile behavior, CSV, and logout. `scripts/test-login.cjs` independently tests inline server errors with mocked responses.
 
 ## API integration test
 
@@ -105,3 +105,24 @@ See [USERS-AND-DATABASE.md](USERS-AND-DATABASE.md) for the single-file SQL impor
 ## Release review and screenshots
 
 See [RELEASE-REVIEW.md](RELEASE-REVIEW.md) for the final local validation results, desktop/mobile screenshots, known scope, and Hostinger handoff checklist.
+
+## Login troubleshooting and subdomain folders
+
+A folder named `public_html/admin.khushrangevents.com/` is supported; it does not need renaming to `admin`. Keep `khushrang-private` **alongside** public_html, with the real `.env` inside it. The folder name is unrelated to the database name. Set `DB_NAME` to the complete name shown in Hostinger/phpMyAdmin, including its account prefix.
+
+After replacing the contents of the deployed panel folder with the updated build, the white login screen displays safe error codes when setup fails. You can also open `api.php?action=me` in a browser. A configured server without a login returns 401 “Please sign in”; setup failures return a specific 503 code:
+
+| Code | Check |
+|---|---|
+| CONFIG_MISSING / ENV_NOT_READABLE | Private `.env` location and PHP read permissions |
+| ENV_FORMAT_INVALID | Quotes, duplicate settings, or malformed lines |
+| DB_CONFIG_INVALID | Required DB fields and numeric DB_PORT |
+| DB_NOT_FOUND | Exact DB_NAME, including Hostinger prefix |
+| DB_ACCESS_DENIED | DB_USER, DB_PASSWORD, and database-user privileges |
+| DB_UNREACHABLE | DB_HOST/DB_PORT and MySQL availability |
+| DB_TABLES_MISSING | The selected database contains the imported tables |
+| DB_SCHEMA_MISMATCH | Columns match the installed application version |
+| STORAGE_CONFIG_INVALID | STORAGE_PATH is an absolute filesystem path, not a URL |
+| PHP_MYSQL_MISSING / SESSION_UNAVAILABLE | PDO MySQL extension or PHP session storage |
+
+Errors do not include passwords, connection strings, or private file contents. The server log uses the same error code. This login/configuration update changes no database structure; keep the existing database, private `.env`, and media storage when replacing public deployment files.

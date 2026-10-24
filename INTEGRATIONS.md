@@ -156,7 +156,7 @@ For authenticated inbound 5xx or network timeouts, retry with backoff and the sa
 
 ## Testing and maintenance
 
-Use disposable data only. The existing browser smoke test now checks Integrations navigation and confirms demo delivery is disabled. `scripts/test-integrations.php` exercises idempotency, consent, suppression, retries, permanent failures, leases, recipient changes, and unsafe URLs with an injected outbound transport. It never sends real emails:
+Use disposable data only. The authenticated browser smoke test checks Integrations navigation and verifies that no portal or demonstration entry is mounted before login. `scripts/test-integrations.php` exercises idempotency, consent, suppression, retries, permanent failures, leases, recipient changes, and unsafe URLs with an injected outbound transport. It never sends real emails:
 
 ```sh
 KHUSHRANG_CONFIG=/private/disposable-config.php INTEGRATION_TEST_ALLOW_MUTATIONS=1 php scripts/test-integrations.php
