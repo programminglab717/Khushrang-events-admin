@@ -97,3 +97,7 @@ See [INTEGRATIONS.md](INTEGRATIONS.md) for authenticated inbound client/outreach
 ## Team accounts and initial database
 
 See [USERS-AND-DATABASE.md](USERS-AND-DATABASE.md) for the single-file SQL import, initial login, fixed role permissions, account creation, password reset, and session revocation. The private `INITIAL-LOGIN.txt` is excluded from Git and deployment bundles. Never upload it or the SQL installer into the public panel folder.
+
+## Release review and screenshots
+
+See [RELEASE-REVIEW.md](RELEASE-REVIEW.md) for the final local validation results, desktop/mobile screenshots, known scope, and Hostinger handoff checklist.
