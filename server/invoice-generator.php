@@ -2,7 +2,7 @@
 declare(strict_types=1);
 if(PHP_SAPI!=='cli'&&!defined('KHUSHRANG_INTERNAL')){http_response_code(404);exit;}
 function invoice_default_template(): array {
- return ['bName'=>'Khushrang Events','bSite'=>'khushrangevents.com','bPhone'=>'','bAddr'=>'','prefix'=>'KE-','nextNo'=>'1001','cur'=>'PKR','defTax'=>'0','notes'=>'Dear customer, please send a screenshot of the transfer receipt on WhatsApp after paying the invoice. Thank you!','pay'=>"Bank transfer:\nBank: \nAccount title: \nAccount number: \n\nEasypaisa / JazzCash / SadaPay:\nAccount #: \nTitle: ",'logo'=>''];
+ return ['bName'=>'Khushrang Events','bSite'=>'khushrangevents.com','bPhone'=>'','bAddr'=>'','prefix'=>'KE-','nextNo'=>'1001','cur'=>'PKR','defTax'=>'0','notes'=>'Dear customer, please send a screenshot of the transfer receipt on WhatsApp after paying the invoice. Thank you!','pay'=>"Bank transfer:\nBank:\nAccount title:\nAccount number:\n\nEasypaisa / JazzCash / SadaPay:\nAccount #:\nTitle: ",'logo'=>''];
 }
 function invoice_text(array $data,string $key,int $max,bool $required=false): string {
  $v=$data[$key]??'';if(!is_string($v)||strlen($v)>$max||($required&&trim($v)===''))throw new IntegrationError('Invalid '.$key.'.');return trim($v);

@@ -5,7 +5,7 @@ type Row={id:string;[key:string]:string};
 type Template={bName:string;bSite:string;bPhone:string;bAddr:string;prefix:string;nextNo:string;cur:string;defTax:string;notes:string;pay:string;logo:string};
 type Item={d:string;q:string;r:string;amount?:string};
 type Details={template:Template;client:string;extra:string;date:string;due:string;items:Item[];tax:string;paid:string;subtotal?:string;tax_amount?:string;total?:string;balance?:string};
-const defaults:Template={bName:'Khushrang Events',bSite:'khushrangevents.com',bPhone:'',bAddr:'',prefix:'KE-',nextNo:'1001',cur:'PKR',defTax:'0',notes:'Dear customer, please send a screenshot of the transfer receipt on WhatsApp after paying the invoice. Thank you!',pay:'Bank transfer:\nBank: \nAccount title: \nAccount number: \n\nEasypaisa / JazzCash / SadaPay:\nAccount #: \nTitle: ',logo:''};
+const defaults:Template={bName:'Khushrang Events',bSite:'khushrangevents.com',bPhone:'',bAddr:'',prefix:'KE-',nextNo:'1001',cur:'PKR',defTax:'0',notes:'Dear customer, please send a screenshot of the transfer receipt on WhatsApp after paying the invoice. Thank you!',pay:'Bank transfer:\nBank:\nAccount title:\nAccount number:\n\nEasypaisa / JazzCash / SadaPay:\nAccount #:\nTitle: ',logo:''};
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const fresh=(template:Template):Details=>({template,client:'',extra:'',date:today(),due:today(),items:[{d:'Event package',q:'1',r:'0'}],tax:template.defTax,paid:'0'});
 const fmt=(n:number,currency:string)=>currency+' '+new Intl.NumberFormat('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
