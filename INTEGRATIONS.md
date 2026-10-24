@@ -1,52 +1,20 @@
-# Integrations: receiving and sending business data
+# Integrations — manage connections from the panel
 
-The static React build now includes a PHP integration API. Credentials and outbound destinations are configured in the **private** `config.php`, never in React, Git, or public JavaScript. An Integrations navigation item displays connection status, the latest 100 inbound requests, outreach activity, and outbound delivery jobs. It also lets administrators queue, retry, or cancel contact handoffs.
+Open **Integrations**. It now has four sections: **API tokens**, **Outbound webhooks**, **MCP / AI access**, and **Activity & delivery**. Super Admin and Admin accounts can manage connections. Finance, Operations and Viewer accounts cannot create credentials or change destinations.
 
-## Install on Hostinger
+## 1. Generate an API token
 
-1. Prepare a NEW EMPTY database by manually importing the complete `database-setup.sql` in phpMyAdmin. It includes every integration table and the initial Super Admin. No migration files or migration runner are used. This installer is for initial setup, not an upgrade of an older populated schema.
-2. Run `npm run build`; upload the contents of `dist/`. It includes `api.php`, `integrations.php`, `integrations-lib.php`, and `integrations-admin.php`. Keep your existing private configuration and media folder.
-3. Add `inbound_connectors` and `email_destination` from `server/config.example.php` to your real private configuration. Never overwrite database credentials while merging these settings.
-4. Enable PHP `curl` in addition to the existing PDO MySQL, fileinfo, and mbstring requirements. Outbound HTTPS must reach the exact configured hostname on port 443. No Node service is used.
-5. Copy `server/integration-worker.php`, `server/integrations-lib.php`, and `server/config-loader.php` to a **private jobs directory outside public_html**. Keep the worker and public API library copies in sync on updates. Add a Hostinger cron job every minute, using your account's actual PHP path and absolute paths:
+1. In **API tokens**, click **Create API token**.
+2. Give the connection a name, a lowercase identifier such as `website`, an expiry, and permission to receive **clients**, **outreach**, or both.
+3. Click **Generate token**. Copy the token from the one-time display and store it in the sending system's secret store.
+4. Use the displayed endpoint URL and the header `Authorization: Bearer YOUR_TOKEN`. Keep the token out of public website JavaScript and URLs.
+5. Check **Activity & delivery → Inbound** for accepted calls. Last-used and expiry information are shown in the token list. Revoke stops subsequent calls immediately.
 
-   ```sh
-   KHUSHRANG_CONFIG=/absolute/private/config.php /usr/bin/php /absolute/private/jobs/integration-worker.php
-   ```
+You no longer need to manually generate a hash or edit config.php to create a new connection. Existing private-file connectors still work and are labeled as file-managed. To rotate a panel token, create a replacement with the same identifier **under the same owner account**, switch the caller, and revoke the old token. Tokens also stop working when their owner is disabled or the owner's email/password/role/access version changes. They expire after the selected 1–365 days (default 90).
 
-   Each invocation processes at most 20 jobs. A failed job schedules its next attempt in MySQL; no persistent daemon is required. Check Hostinger cron output and the panel for failures. If cron is absent, jobs remain queued.
-6. Sign in, open Integrations, confirm configured sources and destination hostname, then test using a dedicated test contact and your receiving system's test workflow. Check that that system deduplicates delivery IDs before enabling actual email sends.
+### Receive client data
 
-The application runs database sessions in UTC. The integrations activity timestamps are displayed as UTC.
-
-## Create inbound keys
-
-Use a different random secret for each trusted server/system. A connector has a stable `source`, allowed `scopes`, and SHA-256 of the secret:
-
-```php
-'inbound_connectors' => [
-    ['source'=>'website', 'token_sha256'=>'HASH_HERE', 'scopes'=>['clients']],
-    ['source'=>'email-platform', 'token_sha256'=>'ANOTHER_HASH', 'scopes'=>['outreach']],
-],
-```
-
-Generate a 32-byte token locally or over SSH without placing it in shell arguments:
-
-```sh
-umask 077
-openssl rand -hex 32 | tr -d '\n' > /private/path/website-integration-token
-php -r 'echo hash_file("sha256", "/private/path/website-integration-token"), PHP_EOL;'
-```
-
-Store the hash in the panel server configuration. Securely give the raw token to the sending backend or its secret store. Do not paste it in browser scripts, public forms, URLs, logs, or chat. Keep the private token file outside the web root or securely remove it after provisioning. The key's raw token is sent as `Authorization: Bearer TOKEN` over HTTPS. The panel never displays hashes or raw tokens. To rotate, add the new hash with the **same source**, switch the sender, then remove the old connector entry. Removing a connector revokes its key.
-
-These are **server-to-server** endpoints: a public website form must submit to your website's own backend, which validates the form and forwards it with the secret. No cross-origin browser credentials or permissive CORS are enabled. If a hosting rewrite strips the Authorization header, preserve it in your Hostinger web server configuration; don't move the token into a query string.
-
-## Receive a client
-
-`POST https://YOUR_DOMAIN/admin/integrations.php?action=clients`
-
-Headers: `Authorization: Bearer TOKEN`, `Content-Type: application/json`.
+POST to the **Receive clients** URL shown in the panel (`integrations.php?action=clients`). Set `Content-Type: application/json` and the bearer header:
 
 ```json
 {
@@ -59,117 +27,86 @@ Headers: `Authorization: Bearer TOKEN`, `Content-Type: application/json`.
 }
 ```
 
-Required: `event_id` (1–128 bytes), `external_id` (1–128), `name` (1–190), valid `email` (up to 254). Phone is optional, up to 80 bytes. Consent must be a JSON boolean when supplied; a missing value never enables consent. The stable pair `(source, external_id)` creates or updates the same client record. Status is Active on creation and preserved on updates. Existing manual/other-source clients are not automatically merged by email. Contact fields are applied in receipt order; this endpoint has no external version reconciliation.
+Name, valid email, event ID, and external ID are required. Phone is optional. Consent is a JSON boolean; omission never enables marketing. Stable `(source, external_id)` updates the same imported client. No automatic email is sent by receiving a contact.
 
-A new event returns HTTP **202**:
+HTTP 202 means a new event was accepted; 200 with `duplicate:true` means it was already accepted. Retrying must retain the same event ID and exact request bytes. Different content or another endpoint with the same event ID returns 409. A genuine update uses a new event ID and the same external ID. Keep the returned `client_id` for callback correlation. Imports do not merge unrelated manual contacts by email; changes are applied in receipt order.
 
-```json
-{"accepted":true,"duplicate":false,"client_id":"EXT-..."}
-```
+### Receive outreach updates
 
-Keep the returned `client_id` in your external system to correlate outreach callbacks. Retry the same `event_id` with the **exact same request bytes**: it returns HTTP 200 with `duplicate:true` without applying it again. Changing the content or endpoint while reusing that event ID returns 409. For a genuine contact update use a new event ID and the same external ID. Event IDs are unique per source across both inbound endpoints.
-
-## Receive outreach updates
-
-`POST https://YOUR_DOMAIN/admin/integrations.php?action=outreach`
-
-Use a token with the `outreach` scope and the same headers.
+POST to the **Receive outreach status** URL (`integrations.php?action=outreach`) using an outreach-scoped token:
 
 ```json
 {
   "event_id": "provider-event-90841",
-  "client_id": "EXT-ID_RETURNED_BY_CLIENT_ENDPOINT",
+  "client_id": "CLIENT_ID_FROM_THE_IMPORT",
   "recipient_email": "client@example.com",
   "message_id": "provider-message-6381",
   "status": "delivered",
-  "occurred_at": "2026-10-24T09:30:00Z"
+  "occurred_at": "2026-10-25T09:30:00Z"
 }
 ```
 
-All fields are required. `client_id` must exist. `recipient_email` is the address to which the original message was sent; this prevents a delayed bounce from suppressing a different, newly updated email address. Message IDs are up to 190 bytes. Allowed statuses: `queued`, `sent`, `delivered`, `opened`, `clicked`, `replied`, `bounced`, `unsubscribed`, `complained`. Use an RFC3339 timestamp with seconds and `Z` or a numeric timezone offset; values more than five minutes in the future are rejected.
+All fields are required. Status may be `queued`, `sent`, `delivered`, `opened`, `clicked`, `replied`, `bounced`, `unsubscribed`, or `complained`. Timestamps use RFC3339 with seconds and timezone; values over five minutes in the future are rejected. Use the address of the original recipient, so an old bounce cannot suppress a newly changed address. The client must exist.
 
-Events are stored as a timeline, sorted by occurrence time. Late `delivered`/`opened` events do not clear an unsubscribe. Bounces, unsubscribes, and complaints suppress the original recipient address from **all** outbound contact handoffs. Suppressions survive subsequent contact imports and consent edits; this version has no automatic resubscription mechanism. All bounce statuses are treated as suppression; a provider adapter should map only appropriate permanent-bounce events to `bounced`.
+Bounces, unsubscribes, and complaints suppress that recipient from outgoing contact handoffs. Late open/delivery events and later contact imports do not remove suppression. This version treats `bounced` as permanent; map provider soft bounces appropriately. There is no automatic resubscription mechanism.
 
-## Send client data to an email/automation system
+The website's own backend/automation should forward forms with the secret token. These endpoints do not offer public-browser CORS or expose the token in a frontend form. Requests are limited to 64 KB and 120 valid-format requests per source per minute; 429 includes Retry-After 60. Database/application setup failures return the safe diagnostic codes described in README.md.
 
-Configure a generic receiver in the private configuration:
+## 2. Add and test outbound webhooks
 
-```php
-'email_destination' => [
-    'url' => 'https://automation.example.com/hooks/khushrang',
-    'allowed_hosts' => ['automation.example.com'],
-    'bearer_token' => 'SET_PRIVATELY_IF_THE_RECEIVER_REQUIRES_IT',
-],
-```
+1. In **Outbound webhooks**, choose **Add webhook**.
+2. Enter a name and a complete HTTPS receiver URL. Add an optional receiver bearer credential. URL query strings are supported for receivers that require them.
+3. Save. The URL is structurally checked without sending a request. Only public destinations are allowed; DNS and public IP validation are repeated and pinned when delivering.
+4. Choose **Test connection**. This sends only an `integration.test` message with a delivery ID and timestamp, not customer data. The result shows HTTP status or an actionable connection/TLS/DNS/extension error.
+5. Edit or disable the receiver from its card. Leaving the bearer field blank preserves the stored credential; the explicit removal checkbox clears it. Secrets are never redisplayed. Changes clear the old test result and require a new test.
 
-The URL must use HTTPS, port 443, and an exact allowed hostname that resolves to public IPv4 addresses. User info, query strings, fragments, private addresses, redirects, and non-HTTPS URLs are rejected. TLS verification remains enabled; DNS answers are checked and pinned to the connection. Secrets belong in the optional bearer credential, not URL query strings. IPv6-only receivers and receivers requiring query-string credentials need an adapter.
+You may configure multiple named webhooks. Existing private-file email configuration remains available as the legacy destination. To manage its replacement through the UI, add a named webhook and choose it when sending.
 
-In the panel choose **Integrations → Send client data**, select a client and purpose, and queue a delivery. Marketing requires explicit **Marketing email consent = Yes** in the client editor; missing consent is No. Both purposes require an active client, valid email, and no suppression. Eligibility is checked again immediately before dispatch. A deleted client, changed recipient address, revoked consent, or suppression blocks a queued delivery.
+Receiver URLs and bearer credentials are AES-256-GCM encrypted in the database. The first webhook save creates **`integration.key` beside the private .env** (outside public_html); PHP must be able to create that file once. Keep its permissions private and **back it up with MySQL and .env**. Losing it makes saved webhook credentials unreadable. It is excluded from Git and deployment bundles. API/MCP tokens store only hashes and do not require this encryption key.
 
-The worker posts this JSON:
+### Send a contact and see failures
+
+In **Activity & delivery**, choose a client, a webhook and a transactional/marketing purpose, then **Send now**. The panel queues and processes that specific job immediately; cron is not required for this manual action. The outgoing JSON is:
 
 ```json
 {
   "event": "client.sync",
   "delivery_id": "STABLE_DELIVERY_ID",
-  "purpose": "marketing",
+  "purpose": "transactional",
   "client": {
     "id": "CLIENT_ID",
     "name": "Example Client",
     "email": "client@example.com",
     "phone": "+92 300 0000000",
-    "email_opt_in": "Yes"
+    "email_opt_in": "No"
   }
 }
 ```
 
-Headers: `Content-Type: application/json`, `Idempotency-Key: STABLE_DELIVERY_ID`, `X-Khushrang-Delivery: STABLE_DELIVERY_ID`, and optional `Authorization: Bearer ...`.
+A destination version is also included for internal delivery consistency. Headers include Content-Type, Idempotency-Key, X-Khushrang-Delivery, and the optional bearer credential. The receiver maps this contract to its own email/contact workflow. **A 2xx acceptance is not proof of email delivery**; actual delivery comes through outreach callbacks. The connector does not compose email content or automatically map every provider's native API.
 
-Only allowlisted contact fields are sent. Invoices, media, internal credentials, and other business data are excluded. The payload is a snapshot at queue time. If the recipient changes, cancel and queue again. The external receiver maps this payload to its contact and email workflow; **queuing a handoff does not itself compose or send an email**. Native Brevo/Mailchimp/GHL/etc. payloads and signature formats are not assumed: use an automation webhook or a provider-specific adapter.
+The client must be active, have a valid email, and not be suppressed. Marketing additionally requires Marketing email consent = Yes. Eligibility is rechecked immediately before sending. Changes to the client email block the old snapshot. Changing/disabling a webhook blocks queued snapshots for its former configuration; queue a new job after reviewing the new receiver rather than silently redirecting customer data.
 
-Receiver HTTP 2xx marks the outbound job **accepted**. That means the external system accepted the handoff, **not** that an email reached an inbox. Actual delivery is recorded through the outreach callback. Network/TLS errors, 408, 429, and 5xx retry up to five attempts with delays of 1, 2, 4, and 8 minutes. Other non-2xx statuses fail immediately. Administrators may manually retry failed/retry jobs or cancel pending/retry/failed jobs; accepted/processing jobs cannot be edited this way. Manual retry allows a further attempt without resetting recorded attempt counts.
+Attempts, HTTP codes and sanitized failure reasons are visible under Outbound activity. Response bodies are discarded. Network/TLS errors, 408, 429 and 5xx automatically retry up to five attempts with 1/2/4/8-minute delays when a worker runs. Other 4xx errors fail directly. Manual Send now can retry a failed/retry job; accepted jobs cannot be resent through that action. Cancel stops queued jobs. At-least-once delivery is possible after a timeout/crash: the receiver must deduplicate the stable delivery ID.
 
-A worker lease expires after five minutes if a process crashes. Delivery is **at least once**: the receiver must deduplicate the stable delivery ID, including after an ambiguous timeout or worker crash. Response bodies are discarded rather than logged. Status, attempt count, and sanitized errors are available in the panel.
+### Configure automatic retries in Hostinger
 
-## Admin API actions
+Expand **Set up automatic retries in Hostinger** on the Activity page and copy the command generated for your actual server path. Create an hPanel cron job running that PHP command **every minute** using PHP 8.1+.
 
-These use `api.php`, an authenticated Super Admin or Admin PHP session, and same-origin checks. Temporary-password users must change their password first. Do not use inbound keys for admin actions.
+The updated deployment includes `integration-worker.php` alongside the application PHP files. It is **CLI-only and returns 404 through HTTP**. No separate Node service or private worker dependency copying is required. If you configured an older cron job pointing to a private copy, replace it with the new command. New jobs use isolated queue states so an obsolete worker cannot send them to an old destination. The new worker handles current configuration, batches up to 20 jobs, reclaims expired leases and reports its last run to the panel.
 
-| Method/action | Body / response |
-|---|---|
-| GET `?action=integration_overview` | Connection metadata and latest 100 rows per activity type; no credentials |
-| POST `?action=integration_enqueue` | `{"client_id":"...","purpose":"transactional","idempotency_key":"unique-operation-id"}` |
-| POST `?action=integration_retry` | `{"id":"delivery-id"}` |
-| POST `?action=integration_cancel` | `{"id":"delivery-id"}` |
+The worker also removes rate buckets older than one day and MCP audit entries older than 90 days. Idempotency receipts are retained so old writes cannot be silently replayed. Stop obsolete workers; do not run outdated and new application code together.
 
-Retain an enqueue idempotency key across uncertain retries of the same operation. A new key intentionally creates a new handoff. The panel generates a fresh key for each explicit queue action. Inbound imports do **not** automatically trigger external emails.
+## 3. Connect an AI client with MCP
 
-## Inbound responses and limits
+See **[MCP.md](MCP.md)** for token scopes, client configuration, tools, batch imports, file handling, and compatibility. The **MCP / AI access** page displays the URL, creates the token, offers a one-click initial connection test, and supplies Claude Code/JSON configuration examples.
 
-- 200: duplicate already accepted; 202: new event accepted.
-- 400: invalid payload; 401: missing/invalid key; 403: wrong scope/HTTPS required.
-- 404: unknown endpoint/client; 409: event-ID conflict or blocked delivery.
-- 413: more than 64 KB; 415: incorrect content type; 429: more than 120 valid-format requests per source per minute (Retry-After 60).
-- 500/503: configuration/schema/service problem; inspect private server logs and retry with the same event ID after correction.
+## Deploy this update
 
-For authenticated inbound 5xx or network timeouts, retry with backoff and the same bytes/event ID. Do not retry invalid payloads unchanged. Each source's rate limit is shared across its rotated keys. Keep receipt/delivery IDs when troubleshooting; don't log raw bearer tokens or full customer payloads.
+Replace the public build, including all PHP helper files, `mcp.php`, CLI worker, and favicon. **No SQL reimport or new tables are required**: connections, encrypted settings, audit and operation receipts use the existing records table. Keep .env, integration.key, MySQL and media in place. If a custom .htaccess exists, merge the included bearer-header forwarding block with your rules rather than overwriting them.
 
-## Testing and maintenance
+Webhooks require PHP cURL and OpenSSL; the UI reports missing cURL or key-file errors. Native MCP/API use bearer Authorization headers. The build includes an Apache/LiteSpeed forwarding block; if a valid token still returns 401, check that your host preserves that header instead of putting the token in a URL.
 
-Use disposable data only. The authenticated browser smoke test checks Integrations navigation and verifies that no portal or demonstration entry is mounted before login. `scripts/test-integrations.php` exercises idempotency, consent, suppression, retries, permanent failures, leases, recipient changes, and unsafe URLs with an injected outbound transport. It never sends real emails:
+## Verification
 
-```sh
-KHUSHRANG_CONFIG=/private/disposable-config.php INTEGRATION_TEST_ALLOW_MUTATIONS=1 php scripts/test-integrations.php
-```
-
-The disposable config needs a nonempty dummy email destination. The test intentionally exercises the queue; do not run it on a production database. `scripts/test-integration-http.mjs` additionally tests real HTTP auth/scopes and the admin endpoints. Its private credential JSON needs `email`, `password`, and `inbound_tokens: {"clients":"raw-test-key","outreach":"raw-other-test-key"}` matching the configured test sources:
-
-```sh
-API_TEST_CREDENTIALS_FILE=/private/test.json INTEGRATION_TEST_ALLOW_MUTATIONS=1 node scripts/test-integration-http.mjs
-```
-
-Local PHP/MySQL-compatible integration tests and browser tests passed. Real provider connectivity, TLS/authentication, payload mapping, and actual Hostinger cron must still be tested after your provider is configured. No external customer emails were sent during development.
-
-Back up integration tables with the rest of MySQL. Outbound snapshots contain contact data and should follow your retention policy. Keep inbox idempotency receipts for at least as long as upstream systems can replay events; deleting receipts allows old events to apply again. Periodically remove `integration_rate_limits` rows older than one day. Avoid deleting active pending/retry/processing jobs. This version supports one outbound email destination and multiple inbound sources, not an arbitrary workflow designer.
-
-Database credentials and the media path may now be supplied by the private `.env` described in README.md. Connector hashes and email destination configuration remain in private `config.php`; the loader merges both. For dotenv-only cron setup, set `KHUSHRANG_ENV_FILE` to the absolute private file path.
+Real local API and browser tests cover token creation/revocation, scope boundaries, expiry/owner changes, credential non-disclosure, named webhook creation/edit/disable, inline failures, private-key encryption, destination-version binding, queue isolation, and mobile layout. Outgoing delivery uses an injected transport in tests: **no real provider/customer emails were sent**. The official MCP SDK performs real local initialize/discovery/tool calls; those are not mocked. Validate actual Hostinger header forwarding, extensions, receiver DNS/TLS, cron, and provider mapping after deployment.

@@ -11,6 +11,7 @@ All screenshots show sample data, not customer information.
 - [Mobile dashboard](docs/ui-review/dashboard-mobile.png)
 - [Users and role guide](docs/ui-review/users-desktop.png)
 - [Integrations](docs/ui-review/integrations-desktop.png)
+- [MCP access](docs/ui-review/mcp-desktop.png)
 
 ![Desktop dashboard](docs/ui-review/dashboard-desktop.png)
 
@@ -36,7 +37,7 @@ All screenshots show sample data, not customer information.
 | Dotenv parsing, special-character passwords, precedence and legacy compatibility | Passed |
 | Upcoming-event date/status filtering and six-month charts separated by year | Passed |
 | Invoice print layout | Generated a one-page A4 PDF; editor hidden |
-| Public deployment archive | Verified to exclude `.env`, initial credentials, SQL and private worker |
+| Public deployment archive | Verified to exclude `.env`, initial credentials, SQL and encryption keys; packaged worker returns HTTP 404 |
 
 During review the mobile navigation gained explicit close/backdrop/Escape controls. The chart now follows the latest six months in the business timezone rather than a hard-coded range, and past/completed/cancelled events are excluded from the upcoming list. Regression tests are in `scripts/smoke.cjs` and `scripts/test-dashboard.cjs`.
 
@@ -47,7 +48,7 @@ During review the mobile navigation gained explicit close/backdrop/Escape contro
 3. Upload the contents of `dist/` (or extract the supplied `khushrang-hostinger.zip`) into the panel's public folder. Do not publish the SQL installer or `INITIAL-LOGIN.txt` there.
 4. Sign in with the private initial credentials, change the password, and add staff under Users & roles.
 5. On Hostinger verify HTTPS, PHP extensions/session storage, actual MySQL connection, media permissions, and authenticated downloads. Check that a frontend replacement preserves uploads, and test database/media backups.
-6. For outbound email integration configure the real receiver privately and schedule the worker in Hostinger cron. Test receiver authentication, payload mapping and idempotency with a test contact before enabling its email workflow.
+6. For outbound email integration configure the real receiver in Integrations and schedule the current CLI worker in Hostinger cron. Test receiver authentication, payload mapping and idempotency with a test contact before enabling its email workflow.
 
 Hostinger-specific checks and the actual external email service remain outstanding because this review ran locally. The provider-neutral connector transfers contact data; composing/sending the email is configured in the receiving system. This release has fixed role presets, the itemized generator plus legacy single-total invoices, and a simple client-based estimate for legacy collections; advanced tax/accounting, custom permissions, audit history, and event-linked media albums remain outside the current implementation. See README.md, USERS-AND-DATABASE.md, and INTEGRATIONS.md for the detailed setup and scope.
 
@@ -60,3 +61,9 @@ The user identified an incorrect database name in the deployed configuration. Co
 ## Invoice integration and owner controls — 25 October
 
 The uploaded standalone invoice generator has been ported into the authenticated panel, with database-backed templates, itemized invoices, shared numbering, linked advance receipts, reprinting/editing, backup import/export, and A4 PDF printing. Generated invoices appear in Invoices automatically. API/browser tests passed for calculations, persistence, idempotent saves, receipt reconciliation, printing, and mobile layout. The exact single-active-Super-Admin case was also tested: Role/Active controls are disabled, other fields can be saved, and direct disable/demotion API calls are rejected without logging out the owner. No schema changes or SQL reimport are required. See INVOICE-GENERATOR.md.
+
+## Connections, MCP and branding
+
+API token generation/revocation, encrypted named webhook settings, connection probes, immediate sends, queue retries and visible failures are now managed in the panel. Official MCP SDK end-to-end checks passed for scoped reads/writes, atomic imports, invoice calculation, media, revision checks, idempotency, revocation and forbidden access. Browser checks cover functional UI-generated tokens and responsive controls. Webhook transport was injected for tests; no customer emails were sent. MCP supports stateless HTTP with bearer headers; OAuth-only clients require a gateway. No new SQL tables/import are required. See INTEGRATIONS.md and MCP.md.
+
+The supplied K mark now has a transparent exterior and is used for login/sidebar branding and favicon. Preserve the private `.env`, media and `integration.key` when updating public files. Replace obsolete cron commands with the command displayed by the updated panel.

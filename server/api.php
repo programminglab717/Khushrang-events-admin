@@ -45,6 +45,7 @@ require __DIR__.'/auth.php';
 if(str_starts_with($action,'integration_')&&!auth_policy($user['role'])['integrations'])fail('Integration administrator permission required.',403);
 require __DIR__.'/integrations-admin.php';
 require __DIR__.'/invoice-generator.php';
+require_once __DIR__.'/records-service.php';
 $kinds=['events','clients','vendors','invoices','payments','expenses','tasks','media'];
 if ($action==='data') {
     $out=array_fill_keys($kinds,[]);
@@ -73,36 +74,9 @@ if($action==='upload') {
 $input=json_decode(file_get_contents('php://input'),true);if(!is_array($input))fail('Invalid JSON.');
 $kind=$input['kind']??'';if(!in_array($kind,$kinds,true))fail('Unknown record type.');
 auth_require($user,$kind,'write');
-$recordId=$action==='delete'?($input['id']??''):($input['row']['id']??'');
-if($recordId==='invoice-template-default'||str_starts_with((string)$recordId,'invoice-number-'))fail('That record ID is reserved for invoice settings.',409);
-if((str_starts_with((string)$recordId,'INV-GEN-')&&$kind!=='invoices')||(str_starts_with((string)$recordId,'PAY-GEN-')&&$kind!=='payments'))fail('That record ID belongs to another record type.',409);
-if($action==='delete') {
-    $db->beginTransaction();
-    $q=$db->prepare('SELECT payload FROM records WHERE id=? AND kind=? FOR UPDATE');$q->execute([$input['id']??'',$kind]);$old=$q->fetch();
-    if(!$old){$db->rollBack();fail('Record not found.',404);}
-    $row=json_decode($old['payload'],true);
-    if(($row['managed_by']??'')==='invoice_generator'){$db->rollBack();fail('Edit the amount paid in the linked invoice generator instead.',409);}
-    if($kind==='invoices'&&isset($row['generator_details'])){$q=$db->prepare("DELETE FROM records WHERE id=? AND kind='payments'");$q->execute(['PAY-GEN-'.hash('sha256',$input['id'])]);}
-    $q=$db->prepare('DELETE FROM records WHERE id=? AND kind=?');$q->execute([$input['id'],$kind]);$db->commit();
-    if($kind==='media'){$file=$storage.'/'.basename($row['stored']);if(is_file($file))unlink($file);}echo '{}';exit;
-}
-if($action==='save') {
-    if(($kind==='invoices'&&str_starts_with($input['row']['id']??'','INV-GEN-'))||($kind==='payments'&&str_starts_with($input['row']['id']??'','PAY-GEN-')))fail('Use the invoice generator to update generated invoices and their linked payments.',409);
-    $q=$db->prepare('SELECT payload FROM records WHERE id=? AND kind=?');$q->execute([$input['row']['id']??'',$kind]);$protected=$q->fetch();$protected=$protected?json_decode($protected['payload'],true):[];
-    if(isset($protected['generator_details']))fail('Edit this invoice using the invoice generator.',409);
-    if(($protected['managed_by']??'')==='invoice_generator')fail('Edit the amount paid in the linked invoice generator instead.',409);
-    if($kind==='media')fail('Use the upload endpoint.');
-    $row=$input['row']??[];$id=$row['id']??'';if(!is_string($id)||!preg_match('/^[A-Za-z0-9-]{1,80}$/',$id))fail('Invalid record ID.');
-    $fields=['events'=>['name','type','date','location','client','amount','status'],'clients'=>['name','email','phone','status','email_opt_in'],'vendors'=>['name','type','phone','email','status'],'invoices'=>['name','client','date','amount','status'],'payments'=>['name','client','date','amount','status'],'expenses'=>['name','type','date','amount','status'],'tasks'=>['name','client','date','status']];
-    $states=['events'=>['Inquiry','Planning','Confirmed','Completed','Cancelled'],'clients'=>['Active','Inactive'],'vendors'=>['Active','Preferred','Inactive'],'invoices'=>['Draft','Sent','Paid','Overdue','Cancelled'],'payments'=>['Received','Pending'],'expenses'=>['Pending','Paid'],'tasks'=>['To do','In progress','Done']];
-    $clean=['id'=>$id];foreach($fields[$kind] as $f){$v=$row[$f]??'';if(!is_string($v)||strlen($v)>2000)fail('Invalid field: '.$f);$clean[$f]=trim($v);}
-    if($kind==='clients'){if($clean['email_opt_in']==='')$clean['email_opt_in']='No';if(!in_array($clean['email_opt_in'],['Yes','No'],true))fail('Invalid email consent.');}
-    if($clean['name']==='')fail('Name is required.');
-    if(!in_array($clean['status'],$states[$kind],true))fail('Invalid status.');
-    if(isset($clean['amount'])&&(!is_numeric($clean['amount'])||(float)$clean['amount']<0||(float)$clean['amount']>999999999999))fail('Invalid amount.');
-    if(isset($clean['date'])){$d=DateTimeImmutable::createFromFormat('!Y-m-d',$clean['date']);if(!$d||$d->format('Y-m-d')!==$clean['date'])fail('Invalid date.');}
-    if(!empty($clean['email'])&&!filter_var($clean['email'],FILTER_VALIDATE_EMAIL))fail('Invalid email.');
-    $q=$db->prepare('INSERT INTO records(id,kind,payload) VALUES(?,?,?) ON DUPLICATE KEY UPDATE payload=IF(kind=VALUES(kind),VALUES(payload),payload),updated_at=NOW()');$q->execute([$id,$kind,json_encode($clean)]);echo json_encode(['id'=>$id]);exit;
-}
+try {
+ if($action==='delete'){echo json_encode(business_delete($db,$kind,(string)($input['id']??''),$config));exit;}
+ if($action==='save'){if(!is_array($input['row']??null))fail('Invalid record.');$row=business_save($db,$kind,$input['row']);echo json_encode(['id'=>$row['id']]);exit;}
+}catch(IntegrationError $e){fail($e->getMessage(),$e->httpStatus);}
 fail('Unknown action.',404);
 } catch(Throwable $e) { [$code,$message,$status]=khushrang_failure($e);error_log('Khushrang API ['.$code.']: '.$message);fail($message,$status,$code); }

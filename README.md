@@ -2,7 +2,7 @@
 
 **[View the UI screenshots](docs/UI-PREVIEW.md)** · **[Download the deployment ZIP](deployment/khushrang-hostinger.zip)** · **[Database installer](database-setup.sql)** · **[Deployment checklist](RELEASE-REVIEW.md#deployment-handoff)**
 
-The deployment ZIP contains the public panel files only. Import the SQL separately through phpMyAdmin and keep the real `.env`, credentials, media storage, and cron worker private.
+The deployment ZIP contains the public panel files only. Import the SQL separately through phpMyAdmin and keep the real `.env`, credentials, media storage, and encryption key private.
 
 The UI follows the Khushrang website palette: deep teal `#004c43`, warm cream `#fff4df`, and magenta `#a20d49`, with a persistent left navigation panel and responsive mobile navigation. Brand styling is centralized in `src/theme.css`.
 
@@ -96,7 +96,7 @@ Verified in this environment: production TypeScript/Vite build; Chromium desktop
 
 ## External integrations
 
-See [INTEGRATIONS.md](INTEGRATIONS.md) for authenticated inbound client/outreach endpoints, the outbound email-system queue, consent/suppression handling, retry jobs, payloads, and Hostinger cron setup. The complete `database-setup.sql` includes integration and account tables; no migration files or runner are used. The frontend build includes the public PHP integration files. Keep the cron worker and credentials private.
+See [INTEGRATIONS.md](INTEGRATIONS.md) for authenticated inbound client/outreach endpoints, the outbound email-system queue, consent/suppression handling, retry jobs, payloads, and Hostinger cron setup. The complete `database-setup.sql` includes integration and account tables; no migration files or runner are used. The frontend build includes the public PHP integration files. The packaged worker is CLI-only (HTTP returns 404); copy its current cron command from Integrations. Keep credentials and `integration.key` private. Manage API tokens and named webhooks directly in the panel. See [MCP.md](MCP.md) for scoped AI access, supported clients and tools. Existing installations need no SQL reimport for this update.
 
 ## Team accounts and initial database
 

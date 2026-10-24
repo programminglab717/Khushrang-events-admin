@@ -43,27 +43,15 @@ function invoice_details(array $input): array {
  $paid=invoice_number_value($input['paid']??'0',2,999999999999);if($paid>$total)throw new IntegrationError('Amount paid cannot exceed the invoice total.');
  return ['template'=>$tpl,'client'=>$client,'extra'=>$extra,'date'=>$dates['date'],'due'=>$dates['due'],'items'=>$clean,'tax'=>(string)($taxRate/1000),'subtotal'=>invoice_money($subtotal),'tax_amount'=>invoice_money($tax),'total'=>invoice_money($total),'paid'=>invoice_money($paid),'balance'=>invoice_money($total-$paid)];
 }
-if(str_starts_with($action,'invoice_')){
- try{
-  auth_require($user,'invoices',$action==='invoice_template_get'?'read':'write');
-  if($action==='invoice_template_get'){echo json_encode(invoice_settings($db));exit;}
-  if($_SERVER['REQUEST_METHOD']!=='POST')throw new IntegrationError('POST required.',405);
-  $raw=file_get_contents('php://input',false,null,0,1500001);if(strlen($raw)>1500000)throw new IntegrationError('Invoice request is too large.',413);
-  $input=json_decode($raw,true,64,JSON_THROW_ON_ERROR);if(!is_array($input))throw new IntegrationError('Invalid JSON.');
-  if($action==='invoice_template_save'){
-   $template=invoice_template($input);$db->beginTransaction();$old=invoice_settings($db,true);
-   if($template['prefix']===$old['prefix']&&(int)$template['nextNo']<(int)$old['nextNo'])throw new IntegrationError('Next invoice number cannot move backwards for the same prefix.',409);
-   $q=$db->prepare("UPDATE records SET payload=? WHERE id='invoice-template-default' AND kind='invoice_template'");$q->execute([json_encode($template,JSON_THROW_ON_ERROR)]);$db->commit();echo json_encode($template);exit;
-  }
-  if($action!=='invoice_save')throw new IntegrationError('Unknown invoice action.',404);
+function invoice_commit(PDO $db,array $input): array {
   $id=invoice_text($input,'id',80,true);if(!preg_match('/^INV-GEN-[a-f0-9-]{36}$/',$id))throw new IntegrationError('Invalid generated invoice ID.');
   if(!is_array($input['details']??null))throw new IntegrationError('Invalid invoice details.');
   $details=invoice_details($input['details']);$status=$input['status']??'Draft';if(!is_string($status)||!in_array($status,['Draft','Sent','Overdue','Cancelled'],true))throw new IntegrationError('Invalid invoice status.');
   if(isset($input['version'])&&(!is_scalar($input['version'])||!preg_match('/^[1-9][0-9]{0,8}$/',(string)$input['version'])))throw new IntegrationError('Invalid invoice version.');
-  $hash=hash('sha256',$raw);$db->beginTransaction();$settings=invoice_settings($db,true);
+  $hash=hash('sha256',json_encode($input,JSON_THROW_ON_ERROR));$own=!$db->inTransaction();if($own)$db->beginTransaction();$settings=invoice_settings($db,true);
   $q=$db->prepare("SELECT payload,kind FROM records WHERE id=? FOR UPDATE");$q->execute([$id]);$old=$q->fetch();if($old&&$old['kind']!=='invoices')throw new IntegrationError('Invoice ID is occupied by another record.',409);$old=$old?json_decode($old['payload'],true):null;
   if($old){
-   if(hash_equals($old['generator_request_hash']??'',$hash)){$db->commit();echo json_encode(['invoice'=>$old,'template'=>$settings,'duplicate'=>true]);exit;}
+   if(hash_equals($old['generator_request_hash']??'',$hash)){if($own)$db->commit();return ['invoice'=>$old,'template'=>$settings,'duplicate'=>true];}
    if(!isset($input['version']))throw new IntegrationError('Invoice already exists. Reopen it from Invoices.',409);
    if((string)$input['version']!==($old['version']??''))throw new IntegrationError('This invoice was changed elsewhere. Reopen it before saving.',409);
    $number=$old['invoice_number'];$version=(int)$old['version']+1;
@@ -82,6 +70,22 @@ if(str_starts_with($action,'invoice_')){
   // One managed receipt per generated invoice; edits reconcile rather than duplicate it.
   $paymentId='PAY-GEN-'.hash('sha256',$id);
   if($details['paid']!=='0.00'){$payment=['id'=>$paymentId,'name'=>'Payment for '.$number,'client'=>$details['client'],'date'=>$details['date'],'amount'=>$details['paid'],'currency'=>$row['currency'],'status'=>'Received','invoice_id'=>$id,'managed_by'=>'invoice_generator'];$q=$db->prepare("INSERT INTO records(id,kind,payload) VALUES(?,'payments',?) ON DUPLICATE KEY UPDATE payload=VALUES(payload)");$q->execute([$paymentId,json_encode($payment,JSON_THROW_ON_ERROR)]);}else{$q=$db->prepare("DELETE FROM records WHERE id=? AND kind='payments'");$q->execute([$paymentId]);}
-  $db->commit();echo json_encode(['invoice'=>$row,'template'=>$settings,'duplicate'=>false]);exit;
+  if($own)$db->commit();return ['invoice'=>$row,'template'=>$settings,'duplicate'=>false];
+
+}
+if(isset($action)&&str_starts_with($action,'invoice_')){
+ try{
+  auth_require($user,'invoices',$action==='invoice_template_get'?'read':'write');
+  if($action==='invoice_template_get'){echo json_encode(invoice_settings($db));exit;}
+  if($_SERVER['REQUEST_METHOD']!=='POST')throw new IntegrationError('POST required.',405);
+  $raw=file_get_contents('php://input',false,null,0,1500001);if(strlen($raw)>1500000)throw new IntegrationError('Invoice request is too large.',413);
+  $input=json_decode($raw,true,64,JSON_THROW_ON_ERROR);if(!is_array($input))throw new IntegrationError('Invalid JSON.');
+  if($action==='invoice_template_save'){
+   $template=invoice_template($input);$db->beginTransaction();$old=invoice_settings($db,true);
+   if($template['prefix']===$old['prefix']&&(int)$template['nextNo']<(int)$old['nextNo'])throw new IntegrationError('Next invoice number cannot move backwards for the same prefix.',409);
+   $q=$db->prepare("UPDATE records SET payload=? WHERE id='invoice-template-default' AND kind='invoice_template'");$q->execute([json_encode($template,JSON_THROW_ON_ERROR)]);$db->commit();echo json_encode($template);exit;
+  }
+  if($action!=='invoice_save')throw new IntegrationError('Unknown invoice action.',404);
+  echo json_encode(invoice_commit($db,$input));exit;
  }catch(IntegrationError $e){if($db->inTransaction())$db->rollBack();fail($e->getMessage(),$e->httpStatus);}catch(JsonException $e){if($db->inTransaction())$db->rollBack();fail('Invalid invoice JSON.');}catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
 }

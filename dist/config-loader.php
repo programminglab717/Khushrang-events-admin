@@ -78,6 +78,7 @@ function khushrang_load_config(string $configPath): array {
     $storage=$read('STORAGE_PATH');if($storage!==null)$config['storage_path']=$storage;
     if(empty($config['storage_path'])||!str_starts_with($config['storage_path'],'/'))throw new KhushrangConfigError('STORAGE_CONFIG_INVALID','STORAGE_PATH must be an absolute server filesystem path, not a URL.');
     foreach(['dsn','user','password'] as $key)if(!array_key_exists($key,$config))throw new KhushrangConfigError('DB_CONFIG_INVALID','Database configuration is incomplete. Check DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD.');
+    $config['private_directory']=dirname($envPath);
     $config['inbound_connectors']??=[];$config['email_destination']??=[];
     return $config;
 }
