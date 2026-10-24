@@ -1,0 +1,28 @@
+// Disposable database only. Uses the SQL bootstrap account and exercises real authorization.
+import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync} from 'node:fs';
+import {randomBytes} from 'node:crypto';
+if(process.env.INTEGRATION_TEST_ALLOW_MUTATIONS!=='1')throw Error('Use a disposable DB and INTEGRATION_TEST_ALLOW_MUTATIONS=1.');
+const base=process.env.API_TEST_URL||'http://127.0.0.1:8080';
+const admin=JSON.parse(readFileSync(process.env.API_TEST_CREDENTIALS_FILE,'utf8'));
+function session(){let cookie='';return async(action,body,status=200)=>{const r=await fetch(`${base}/api.php?action=${action}`,{method:body?'POST':'GET',headers:{Origin:base,Cookie:cookie,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});for(const c of r.headers.getSetCookie())cookie=c.split(';')[0];assert.equal(r.status,status,`${action}: expected ${status}, got ${r.status} (${await r.clone().text()})`);return r.json();};}
+const root=session();await root('login',{email:admin.email,password:admin.password});
+assert.equal((await root('me')).role,'super_admin');
+const tag='rbac-'+Date.now();const people={};
+for(const role of ['admin','operations','finance','viewer']){const password=randomBytes(18).toString('hex');const email=`${tag}-${role}@example.test`;const made=await root('users_save',{name:`Test ${role}`,email,role,active:true,password});const api=session();const user=await api('login',{email,password});assert.equal(user.must_change_password,true);await api('data',null,403);await api('integration_overview',null,403);await api('users_list',null,403);await api('password_change',{current_password:'wrong',new_password:randomBytes(18).toString('hex')},403);const updatedPassword=randomBytes(18).toString('hex');await api('password_change',{current_password:password,new_password:updatedPassword});await api('data');await api('users_list',null,403);await api('users_save',{name:'Forbidden',email:'forbidden@example.test',role:'super_admin',active:true,password:randomBytes(18).toString('hex')},403);people[role]={id:made.id,email,password:updatedPassword,api};}
+const event={id:tag+'-event',name:'RBAC event',date:'2026-12-01',type:'Wedding',client:'RBAC client',location:'Test',amount:'900',status:'Planning'};
+const invoice={id:tag+'-invoice',name:'RBAC invoice',date:'2026-12-01',client:'RBAC client',amount:'900',status:'Draft'};
+await people.operations.api('save',{kind:'events',row:event});await people.operations.api('save',{kind:'invoices',row:invoice},403);await people.operations.api('integration_overview',null,403);
+await people.finance.api('save',{kind:'invoices',row:invoice});await people.finance.api('save',{kind:'events',row:event},403);await people.finance.api('file&id=anything',null,403);await people.finance.api('integration_overview',null,403);
+await people.viewer.api('save',{kind:'events',row:event},403);await people.viewer.api('delete',{kind:'events',id:event.id},403);await people.viewer.api('integration_overview',null,403);
+const restricted=await people.viewer.api('data');assert.equal(restricted.invoices.length,0);assert.equal(restricted.payments.length,0);assert(restricted.events.some(r=>r.id===event.id));
+await people.admin.api('integration_overview');await people.admin.api('save',{kind:'invoices',row:invoice});
+const before=await root('users_list');assert(!JSON.stringify(before).includes('password_hash'));assert(!JSON.stringify(before).includes('session_version'));
+await root('users_save',{id:people.viewer.id,name:'Viewer disabled',email:people.viewer.email,role:'viewer',active:false});await people.viewer.api('data',null,401);
+await root('users_save',{id:people.operations.id,name:'Former operator',email:people.operations.email,role:'viewer',active:true});await people.operations.api('save',{kind:'events',row:event},401);
+const reset=randomBytes(18).toString('hex');await root('users_save',{id:people.admin.id,name:'Reset administrator',email:people.admin.email,role:'admin',active:true,password:reset});await people.admin.api('data',null,401);const resetSession=session();assert.equal((await resetSession('login',{email:people.admin.email,password:reset})).must_change_password,true);await resetSession('data',null,403);
+const me=await root('me');await root('users_save',{id:me.id,name:me.name,email:me.email,role:'admin',active:true},409);await root('users_save',{id:me.id,name:me.name,email:me.email,role:'super_admin',active:false},409);
+// Verify the actual SQL-seeded account and first-login password change.
+if(process.env.INITIAL_LOGIN_FILE){const text=readFileSync(process.env.INITIAL_LOGIN_FILE,'utf8');const email=text.match(/^Email: (.+)$/m)[1];const password=text.match(/^Temporary password: (.+)$/m)[1];const bootstrap=session();const u=await bootstrap('login',{email,password});assert.equal(u.role,'super_admin');assert.equal(u.must_change_password,true);await bootstrap('data',null,403);const next=randomBytes(18).toString('hex');const fresh=await bootstrap('password_change',{current_password:password,new_password:next});assert.equal(fresh.must_change_password,false);await bootstrap('users_list');await session()('login',{email,password},401);if(process.env.BOOTSTRAP_TEST_OUTPUT)writeFileSync(process.env.BOOTSTRAP_TEST_OUTPUT,JSON.stringify({email,password:next}),{mode:0o600});}
+await root('delete',{kind:'events',id:event.id});await root('delete',{kind:'invoices',id:invoice.id});
+console.log('PASS: '+(process.env.INITIAL_LOGIN_FILE?'SQL-seeded Super Admin, ':'')+'forced password changes, all role boundaries, direct-API privilege escalation denied, financial filtering, disabled/demoted session revocation, password reset, self-lockout protection, and safe user listing.');
