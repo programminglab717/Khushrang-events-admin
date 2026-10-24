@@ -21,7 +21,7 @@ npm run preview
 
 The panel is private in both development and production. It always starts with a standalone white login screen; no dashboard is mounted until authentication succeeds. There is no demo mode or browser-local business data. Building needs Node only; using the application requires the PHP backend, a prepared MySQL database, and an account. For Vite development, run the configured PHP server on port 8080; Vite proxies `/api.php` to it.
 
-Included: overview with calculated payments/expenses chart, event/order pipeline, client directory, vendor directory, invoices, payment and expense records, task checklists, search/status filtering, CSV exports, CRUD forms, and backend-enabled media uploads. PKR is the current currency. Each invoice is a single amount record; multi-line accounting, tax calculations, email delivery, audit logs, event-linked galleries, and customer payment processing require further work. Payment allocations are currently by client rather than invoice; overview collections are an estimate, not an accounting ledger. Live accounts have server-enforced Super Admin, Admin, Operations, Finance, and Viewer roles. See USERS-AND-DATABASE.md.
+Included: overview with calculated payments/expenses chart, event/order pipeline, client directory, vendor directory, invoices, payment and expense records, task checklists, search/status filtering, CSV exports, CRUD forms, and backend-enabled media uploads. PKR is the financial reporting currency. Invoices can be created through the integrated itemized generator with tax, advances, shared templates, and A4 printing; older simple invoice records remain supported. Advanced accounting/tax rules, direct email delivery, audit logs, event-linked galleries, and customer payment processing require further work. Generated advances are linked to their invoice; legacy collections use a client-based estimate. This is not a full accounting ledger. Live accounts have server-enforced Super Admin, Admin, Operations, Finance, and Viewer roles. See USERS-AND-DATABASE.md.
 
 ## Database and media configuration with `.env`
 
@@ -126,3 +126,7 @@ After replacing the contents of the deployed panel folder with the updated build
 | PHP_MYSQL_MISSING / SESSION_UNAVAILABLE | PDO MySQL extension or PHP session storage |
 
 Errors do not include passwords, connection strings, or private file contents. The server log uses the same error code. This login/configuration update changes no database structure; keep the existing database, private `.env`, and media storage when replacing public deployment files.
+
+## Invoice generator
+
+The supplied Khushrang generator is integrated with invoice records and linked advance receipts. See [INVOICE-GENERATOR.md](INVOICE-GENERATOR.md) for the workflow, template backups, numbering, currencies, permissions, and deployment. This update uses existing tables and needs no SQL reimport.

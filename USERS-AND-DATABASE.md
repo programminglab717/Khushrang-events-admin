@@ -35,7 +35,7 @@ Click an account to edit its name, email, role, or active state. To reset a pass
 
 Users can change their own password under **Settings → Account security** by entering the current password. This rotates the active session and signs out other sessions. No forgotten-password email flow is included; a Super Admin can reset staff passwords. If every Super Admin loses access, account recovery requires authorized direct database administration rather than a public recovery endpoint.
 
-You cannot disable or demote your own Super Admin account. The API also preserves at least one active Super Admin. Accounts are disabled rather than deleted so ownership/history can be retained. Roles are checked from MySQL on every request; hiding navigation is only the UI convenience, not the permission boundary. Password hashes and session version counters are never returned by user-list endpoints.
+You cannot disable or demote your own Super Admin account. The API also preserves at least one active Super Admin. The Role/Active controls are disabled for the last active owner and for your own Super Admin account, with an explanation. Accounts are disabled rather than deleted so ownership/history can be retained. Roles are checked from MySQL on every request; hiding navigation is only the UI convenience, not the permission boundary. Password hashes and session version counters are never returned by user-list endpoints.
 
 ## API actions
 

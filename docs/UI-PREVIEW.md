@@ -18,6 +18,16 @@ The login screenshots show the standalone white sign-in page. Portal screenshots
 
 ![Users and roles](ui-review/users-desktop.png)
 
+## Integrated invoice generator
+
+![Invoice generator](ui-review/invoice-generator-desktop.png)
+
+[Mobile generator](ui-review/invoice-generator-mobile.png) · [Example A4 invoice PDF](ui-review/invoice-example.pdf)
+
+## Last Super Admin protection
+
+![Protected Super Admin](ui-review/super-admin-protection.png)
+
 ## Integrations
 
 ![Integrations](ui-review/integrations-desktop.png)
