@@ -2,6 +2,6 @@ node_modules/
 *.tsbuildinfo
 .env*
 !.env.example
-khushrang-hostinger.zip
+/khushrang-hostinger.zip
 
 INITIAL-LOGIN.txt
