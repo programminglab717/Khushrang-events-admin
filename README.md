@@ -1,5 +1,9 @@
 # Khushrang · Business Studio
 
+**[View the UI screenshots](docs/UI-PREVIEW.md)** · **[Download the deployment ZIP](deployment/khushrang-hostinger.zip)** · **[Database installer](database-setup.sql)** · **[Deployment checklist](RELEASE-REVIEW.md#deployment-handoff)**
+
+The deployment ZIP contains the public panel files only. Import the SQL separately through phpMyAdmin and keep the real `.env`, credentials, media storage, and cron worker private.
+
 The UI follows the Khushrang website palette: deep teal `#004c43`, warm cream `#fff4df`, and magenta `#a20d49`, with a persistent left navigation panel and responsive mobile navigation. Brand styling is centralized in `src/theme.css`.
 
 A responsive React + TypeScript admin panel, built to static files with Vite. Node is needed **only for development/building**, never on Hostinger. A PHP 8.1+ API connects to Hostinger MySQL. Direct MySQL access from browser JavaScript would expose credentials, so the PHP layer is required.
